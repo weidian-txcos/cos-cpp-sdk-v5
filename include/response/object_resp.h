@@ -15,6 +15,8 @@
 #include "cos_params.h"
 #include "response/base_resp.h"
 #include <iostream>
+#include <list>
+#include "util/string_util.h"
 
 namespace qcloud_cos {
 
@@ -93,6 +95,106 @@ public:
     }
 };
 
+class ImageBaseResp {
+public:
+    ImageBaseResp() {
+        m_width = 0;
+        m_height = 0;
+        m_quality = 0;
+    }
+
+    virtual std::string DebugString() const {
+        std::string ret = std::string("key:") + m_key + ", location:" + m_location +
+            ", format:" + m_format + ", width:" + StringUtil::Uint64ToString(m_width) + 
+            ", height:" + StringUtil::Uint64ToString(m_height) +
+            ", quality:" + StringUtil::Uint64ToString(m_quality);
+
+        return ret;
+    }
+
+    std::string GetLocation() const {
+        return m_location;
+    } 
+
+    std::string GetKey() const {
+        return m_key;
+    }
+    
+    std::string      m_key;
+    std::string      m_location;
+    std::string      m_format;
+    uint64_t         m_width;
+    uint64_t         m_height;
+    uint64_t         m_quality;
+};
+
+class ImageOriginalResp : public ImageBaseResp {
+public:
+    ImageOriginalResp() {
+        m_orientation = 0;
+    }
+
+    virtual std::string DebugString() const {
+        std::string ret = std::string("key:") + m_key + ", location:" + m_location +
+            ", format:" + m_format + ", width:" + StringUtil::Uint64ToString(m_width) + 
+            ", height:" + StringUtil::Uint64ToString(m_height) +
+            ", quality:" + StringUtil::Uint64ToString(m_quality) +
+            ", ave:" + m_ave + ", orientation:" + StringUtil::Uint64ToString(m_orientation);
+
+        return ret;
+    }
+    
+    std::string         m_ave;
+    uint64_t            m_orientation;
+};
+
+class ImageProcessResp : public ImageBaseResp {
+public:
+    ImageProcessResp() {
+        m_size = 0;
+    }
+
+    virtual std::string DebugString() const {
+        std::string ret = std::string("key:") + m_key + ", location:" + m_location +
+            ", format:" + m_format + ", width:" + StringUtil::Uint64ToString(m_width) + 
+            ", height:" + StringUtil::Uint64ToString(m_height) +
+            ", quality:" + StringUtil::Uint64ToString(m_quality) +
+            ", size:" + StringUtil::Uint64ToString(m_size);
+
+        return ret;
+    }
+    
+    uint64_t            m_size;
+};
+
+
+class ImagResp {
+public:
+    const ImageOriginalResp &GetImageOriginalResp() const {
+        return m_image_original_resp;
+    }
+
+    const std::list<ImageProcessResp> &GetImageProcessResp() const {
+        return m_image_process_resp_list;
+    }
+
+    virtual bool ParseFromXmlString(const std::string& body);
+
+    virtual std::string DebugString() const {
+        std::string ret = m_image_original_resp.DebugString() + "\n";
+        for(std::list<ImageProcessResp>::const_iterator it = m_image_process_resp_list.begin(); 
+            it != m_image_process_resp_list.end(); it++) {
+            ret += it->DebugString() + "\n";
+        }
+
+        return ret;
+    }
+private:
+    ImageOriginalResp       m_image_original_resp;
+    std::list<ImageProcessResp>  m_image_process_resp_list;
+};
+
+
 class PutObjectResp : public BaseResp {
 protected:
     PutObjectResp() {}
@@ -106,6 +208,16 @@ public:
     std::string GetXCosServerSideEncryption() const {
         return GetHeader("x-cos-server-side-encryption");
     }
+
+    virtual bool ParseFromXmlString(const std::string& body) {
+        return m_image_resp.ParseFromXmlString(body);
+    }
+
+    ImagResp &GetImageResp() {
+        return m_image_resp;
+    }
+private:
+    ImagResp    m_image_resp;
 };
 
 class PutObjectByStreamResp : public PutObjectResp {
@@ -269,11 +381,11 @@ public:
     CompleteMultiUploadResp() {}
     virtual ~CompleteMultiUploadResp() {}
 
-    virtual bool ParseFromXmlString(const std::string& body);
+    //virtual bool ParseFromXmlString(const std::string& body);
 
-    std::string GetLocation() const { return m_location; }
-    std::string GetKey() const { return m_key; }
-    std::string GetBucket() const { return m_bucket; }
+    std::string GetLocation() const { return m_image_resp.GetImageOriginalResp().GetLocation(); }
+    std::string GetKey() const { return m_image_resp.GetImageOriginalResp().GetKey(); }
+    //std::string GetBucket() const { return m_bucket; }
     std::string GetVersionId() const { return GetHeader("x-cos-version-id"); }
 
     /// \brief Server端加密使用的算法
@@ -281,10 +393,15 @@ public:
         return GetHeader("x-cos-server-side-encryption");
     }
 
+    virtual bool ParseFromXmlString(const std::string& body) {
+        return m_image_resp.ParseFromXmlString(body);
+    }
+
+    const ImagResp &GetImageResp() const {
+        return m_image_resp;
+    }
 private:
-    std::string m_location; // Object的外网访问域名
-    std::string m_bucket;
-    std::string m_key;
+    ImagResp    m_image_resp;
 };
 
 class MultiUploadObjectResp : public BaseResp {
@@ -299,7 +416,7 @@ public:
 
     std::string GetKey() const { return m_key; }
 
-    std::string GetBucket() const { return m_bucket; }
+    //std::string GetBucket() const { return m_bucket; }
 
     void SetLocation(const std::string& location) { m_location = location; }
 
@@ -318,6 +435,10 @@ public:
         return GetHeader("x-cos-server-side-encryption");
     }
 
+    ImagResp &GetImageResp() {
+        return m_image_resp;
+    }
+
 private:
     std::string m_location; // Object的外网访问域名
     std::string m_bucket;
@@ -326,6 +447,7 @@ private:
 
     // FIXME(sevenyou) 先这么搞吧
     std::string m_resp_tag; // 用于区分是哪一种response
+    ImagResp    m_image_resp;
 };
 
 class AbortMultiUploadResp : public BaseResp {

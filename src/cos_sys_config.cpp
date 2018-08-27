@@ -210,10 +210,10 @@ std::string CosSysConfig::GetHost(uint64_t app_id,
     std::string format_region("");
     if (region == "cn-east" || region == "cn-north" || region == "cn-south"
         || region == "cn-southwest" || region == "cn-south-2" || region == "sg"
-        || StringUtil::StringStartsWith(region, "cos.")) {
+        || StringUtil::StringStartsWith(region, "pic.")) {
         format_region = region;
     } else {
-        format_region = "cos." + region;
+        format_region = "pic." + region;
     }
 
     std::string app_id_suffix = "-" + StringUtil::Uint64ToString(app_id);

@@ -16,6 +16,7 @@
 
 #include "cos_defines.h"
 #include "cos_sys_config.h"
+#include "json/json.h"
 
 namespace qcloud_cos {
 
@@ -176,6 +177,51 @@ private:
     int m_thread_pool_size;
 };
 
+class ImageProcessRule{
+public:
+    ImageProcessRule() {
+        m_is_original_pic = false;
+    }
+
+    /// is_original_pic 是否返回原图信息,true: 返回  false:不返回
+    void SetIsOriginalPic(bool is_original_pic) {
+        m_is_original_pic = is_original_pic;
+    }
+
+    /// 设置图片的规则
+    void AddImageRule(const std::string &file_id, const std::string &rule) {
+        m_image_rules.push_back(std::pair<std::string, std::string>(file_id, rule));
+    }
+
+    /// 获得图片规则的json表示格式
+    std::string GetImageRulesJson() {
+        Json::Value  image_rules(Json::objectValue);
+        image_rules["is_pic_info"] = m_is_original_pic ? 1 : 0;
+        Json::Value  rules(Json::arrayValue);
+
+        for(unsigned i=0; i < m_image_rules.size(); i++) {
+            Json::Value  rule_item(Json::objectValue);
+            rule_item["fileid"] = m_image_rules[i].first;
+            rule_item["rule"] = m_image_rules[i].second;
+            rules.append(rule_item);
+        }
+        image_rules["rules"] = rules;
+
+        std::string result;
+        Json::FastWriter json_writer;
+        result =  json_writer.write(image_rules);
+        if(result.length() > 1 && result[result.length() - 1] == '\n') {
+            return result.substr(0, result.length() - 1);
+        }
+
+        return result;
+    }
+    
+private:
+    bool    m_is_original_pic;
+    std::vector< std::pair<std::string, std::string> >  m_image_rules;
+};
+
 class PutObjectReq : public ObjectReq {
 public:
     /// Cache-Control RFC 2616 中定义的缓存策略，将作为 Object 元数据保存
@@ -251,14 +297,31 @@ public:
         AddHeader("x-cos-server-side-encryption", str);
     }
 
+    /// 设置图片的处理规则
+    void SetImageProcessRule(ImageProcessRule &image_rule) {
+        AddHeader("Pic-Operations", image_rule.GetImageRulesJson());
+    }
+
+    void SetIsCheckMd5(bool is_check_md5) {
+        m_is_check_md5 = is_check_md5;
+    }
+
+    /// 暂时兼容图片处理后端的问题没有返回ETag
+    bool GetIsCheckMd5() const {
+        return m_is_check_md5;
+    }
+
 protected:
     PutObjectReq(const std::string& bucket_name,
                  const std::string& object_name)
         : ObjectReq(bucket_name, object_name) {
         m_method = "PUT";
+        m_is_check_md5 = false;
     }
 
     virtual ~PutObjectReq() {}
+private:
+    bool    m_is_check_md5;
 };
 
 class PutObjectByStreamReq : public PutObjectReq {
@@ -609,6 +672,11 @@ public:
 
     bool GenerateRequestBody(std::string* body) const;
 
+    /// 设置图片的处理规则
+    void SetImageProcessRule(ImageProcessRule &image_rule) {
+        AddHeader("Pic-Operations", image_rule.GetImageRulesJson());
+    }
+
 private:
     std::string m_upload_id;
     std::vector<uint64_t> m_part_numbers;
@@ -663,6 +731,11 @@ public:
     /// 设置Server端加密使用的算法, 目前支持AES256
     void SetXCosServerSideEncryption(const std::string& str) {
         AddHeader("x-cos-server-side-encryption", str);
+    }
+
+    /// 设置图片的处理规则
+    void SetImageProcessRule(ImageProcessRule &image_rule) {
+        AddHeader("Pic-Operations", image_rule.GetImageRulesJson());
     }
 
 private:

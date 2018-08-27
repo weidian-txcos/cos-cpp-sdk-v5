@@ -92,7 +92,7 @@ CosResult ObjectOp::PutObject(const PutObjectByStreamReq& req, PutObjectByStream
     // 如果传递的header中没有Content-MD5则进行SDK进行MD5校验
     bool is_check_md5 = false;
     std::string md5_str = "";
-    if (req.GetHeader("Content-MD5").empty()) {
+    if (req.GetHeader("Content-MD5").empty() && req.GetIsCheckMd5()) {
         Poco::MD5Engine md5;
         Poco::DigestOutputStream dos(md5);
         std::streampos pos = is.tellg();
@@ -135,7 +135,7 @@ CosResult ObjectOp::PutObject(const PutObjectByFileReq& req, PutObjectByFileResp
     // 如果传递的header中没有Content-MD5则进行SDK进行MD5校验
     bool is_check_md5 = false;
     std::string md5_str = "";
-    if (req.GetHeader("Content-MD5").empty()) {
+    if (req.GetHeader("Content-MD5").empty() && req.GetIsCheckMd5()) {
         Poco::MD5Engine md5;
         Poco::DigestOutputStream dos(md5);
         std::streampos pos = ifs.tellg();
@@ -252,6 +252,10 @@ CosResult ObjectOp::MultiUploadObject(const MultiUploadObjectReq& req,
     comp_req.SetRecvTimeoutInms(req.GetRecvTimeoutInms() * 2); // Complete的超时翻倍
     comp_req.SetEtags(etags);
     comp_req.SetPartNumbers(part_numbers);
+    const std::string& pic_operations = req.GetHeader("Pic-Operations");
+    if (!pic_operations.empty()) {
+        comp_req.AddHeader("Pic-Operations", pic_operations);
+    }
 
     result = CompleteMultiUpload(comp_req, &comp_resp);
     resp->CopyFrom(comp_resp);

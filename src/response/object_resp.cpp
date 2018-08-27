@@ -55,7 +55,7 @@ bool InitMultiUploadResp::ParseFromXmlString(const std::string& body) {
     return true;
 }
 
-bool CompleteMultiUploadResp::ParseFromXmlString(const std::string& body) {
+/*bool CompleteMultiUploadResp::ParseFromXmlString(const std::string& body) {
     rapidxml::xml_document<> doc;
     char* cstr = new char[body.size() + 1];
     strcpy(cstr, body.c_str());
@@ -90,6 +90,7 @@ bool CompleteMultiUploadResp::ParseFromXmlString(const std::string& body) {
     delete cstr;
     return true;
 }
+*/
 
 void GetObjectResp::ParseFromHeaders(const std::map<std::string, std::string>& headers) {
     BaseResp::ParseFromHeaders(headers);
@@ -146,8 +147,9 @@ void MultiUploadObjectResp::CopyFrom(const CompleteMultiUploadResp& resp) {
     m_resp_tag = "Complete";
     InternalCopyFrom(resp);
     m_location = resp.GetLocation();
-    m_bucket = resp.GetBucket();
+    //m_bucket = resp.GetBucket();
     m_key = resp.GetKey();
+    m_image_resp = resp.GetImageResp();
 }
 
 bool ListPartsResp::ParseFromXmlString(const std::string& body) {
@@ -337,7 +339,7 @@ void CopyResp::CopyFrom(const CompleteMultiUploadResp& resp) {
     InternalCopyFrom(resp);
     m_resp_tag = "Complete";
     m_location = resp.GetLocation();
-    m_bucket = resp.GetBucket();
+    //m_bucket = resp.GetBucket();
     m_key = resp.GetKey();
 }
 
@@ -410,5 +412,110 @@ bool DeleteObjectsResp::ParseFromXmlString(const std::string& body) {
     delete cstr;
     return true;
 }
+
+bool ImagResp::ParseFromXmlString(const std::string& body) {
+    if(body.empty()) {
+        return true;
+    }
+    
+    rapidxml::xml_document<> doc;
+    char* cstr = new char[body.size() + 1];
+    strcpy(cstr, body.c_str());
+    cstr[body.size()] = '\0';
+
+    if (!StringUtil::StringToXml(cstr, &doc)) {
+        SDK_LOG_ERR("ImagResp Parse string to xml doc error, xml_body=%s", body.c_str());
+        delete cstr;
+        return false;
+    }
+
+    rapidxml::xml_node<>* root = doc.first_node("UploadResult");
+    if (NULL == root) {
+        SDK_LOG_ERR("Miss root node=UploadResult, xml_body=%s", body.c_str());
+        delete cstr;
+        return false;
+    }
+
+    rapidxml::xml_node<>* node = root->first_node();
+    for (; node != NULL; node = node->next_sibling()) {
+        const std::string& node_name = node->name();
+        if ("OriginalInfo" == node_name) {
+            rapidxml::xml_node<>* original_info_node = node->first_node();
+            for (; original_info_node != NULL; original_info_node = original_info_node->next_sibling()) {
+                const std::string& original_info_node_name = original_info_node->name();
+                if("Key" == original_info_node_name) {
+                    m_image_original_resp.m_key = original_info_node->value();
+                } else if("Location" == original_info_node_name) {
+                    m_image_original_resp.m_location = original_info_node->value();
+                } else if("ImageInfo" == original_info_node_name) {
+                    rapidxml::xml_node<>* original_image_info_node = original_info_node->first_node();
+                    for (; original_image_info_node != NULL; original_image_info_node = original_image_info_node->next_sibling()) {
+                        const std::string& original_image_info_node_name = original_image_info_node->name();
+                        if("Format" == original_image_info_node_name) {
+                            m_image_original_resp.m_format = original_image_info_node->value();
+                        } else if("Width" == original_image_info_node_name) {
+                            m_image_original_resp.m_width = StringUtil::StringToUint64(original_image_info_node->value());
+                        } else if("Height" == original_image_info_node_name) {
+                            m_image_original_resp.m_height = StringUtil::StringToUint64(original_image_info_node->value());
+                        } else if("Quality" == original_image_info_node_name) {
+                            m_image_original_resp.m_quality = StringUtil::StringToUint64(original_image_info_node->value());
+                        } else if("Ave" == original_image_info_node_name) {
+                            m_image_original_resp.m_ave = original_image_info_node->value();
+                        } else if("Orientation" == original_image_info_node_name) {
+                            m_image_original_resp.m_orientation = StringUtil::StringToUint64(original_image_info_node->value());
+                        } else {
+                            SDK_LOG_WARN("Unknown field in ImageInfo node, field_name=%s",
+                                original_image_info_node_name.c_str());
+                        }
+                    }
+                } else {
+                    SDK_LOG_WARN("Unknown field in OriginalInfo node, field_name=%s",
+                         original_info_node_name.c_str());
+                }
+            }
+        } else if ("ProcessResults" == node_name) {
+            rapidxml::xml_node<>* object_info_node = node->first_node();
+            for (; object_info_node != NULL; object_info_node = object_info_node->next_sibling()) {
+                const std::string& object_info_node_name = object_info_node->name();
+                if("Object" == object_info_node_name) {
+                    rapidxml::xml_node<>* object_node = object_info_node->first_node();
+                    ImageProcessResp image_process_resp;
+                    for (; object_node != NULL; object_node = object_node->next_sibling()) {
+                        const std::string& object_node_name = object_node->name();
+                        if("Key" == object_node_name) {
+                            image_process_resp.m_key= object_node->value();
+                        } else if("Location" == object_node_name) {
+                            image_process_resp.m_location= object_node->value();
+                        } else if("Format" == object_node_name) {
+                            image_process_resp.m_format= object_node->value();
+                        } else if("Width" == object_node_name) {
+                            image_process_resp.m_width = StringUtil::StringToUint64(object_node->value());
+                        } else if("Height" == object_node_name) {
+                            image_process_resp.m_height = StringUtil::StringToUint64(object_node->value());
+                        } else if("Quality" == object_node_name) {
+                            image_process_resp.m_quality = StringUtil::StringToUint64(object_node->value());
+                        } else if("Size" == object_node_name) {
+                            image_process_resp.m_size = StringUtil::StringToUint64(object_node->value());
+                        } else {
+                           SDK_LOG_WARN("Unknown field in Object node, field_name=%s",
+                                object_node_name.c_str()); 
+                        }
+                    }
+
+                    m_image_process_resp_list.push_back(image_process_resp);
+                } else {
+                    SDK_LOG_WARN("Unknown field in ProcessResults node, field_name=%s",
+                                object_info_node_name.c_str());
+                }
+            }
+        }  else {
+            SDK_LOG_WARN("Unknown field in UploadResult node, field_name=%s",
+                         node_name.c_str());
+        }
+    }
+    delete cstr;
+    return true;
+}
+
 
 } // namespace qcloud_cos
